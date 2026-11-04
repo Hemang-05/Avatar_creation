@@ -38,11 +38,6 @@ export const DEFAULT_PIPELINE_STEPS: Omit<ProcessingStep, "status">[] = [
     label: "Generating voice...",
     description: "Converting presenter script into speech via ElevenLabs TTS",
   },
-  {
-    id: "generating_avatar",
-    label: "Generating presenter...",
-    description: "Animating presenter portrait with lip-sync via D-ID",
-  },
 ];
 
 export const SUGGESTIONS: SuggestionCard[] = [

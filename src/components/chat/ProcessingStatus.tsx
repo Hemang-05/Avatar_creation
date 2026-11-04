@@ -36,19 +36,14 @@ export function ProcessingStatus({
   const isGeneratingVoice = steps.some(
     (s) => s.id === "generating_voice" && s.status === "processing"
   );
-  const isGeneratingAvatar = steps.some(
-    (s) => s.id === "generating_avatar" && s.status === "processing"
-  );
 
   const getSubtitle = () => {
     if (hasError) return "Pipeline halted due to an issue";
-    if (isGeneratingAvatar)
-      return "Animating presenter portrait with lip-sync via D-ID...";
     if (isGeneratingVoice) return "Synthesizing presenter voice audio via ElevenLabs TTS...";
     if (isGeneratingScript) return "Writing broadcast presenter script with Gemini...";
     if (isResearching) return "Researching story & cross-checking claims via Gemini + Tavily...";
     if (isProcessing) return "Extracting and parsing editorial news article...";
-    if (isAllComplete) return "Avatar video ready • Presenter broadcast package complete";
+    if (isAllComplete) return "Presenter voice ready • Broadcast audio package complete";
     if (isArticleExtracted) return "Article extracted • Initializing research agent";
     return "Pipeline initialized";
   };
@@ -94,11 +89,7 @@ export function ProcessingStatus({
             <span className="text-red-400 font-semibold">Error</span>
           ) : isAllComplete ? (
             <span className="text-emerald-400 font-semibold flex items-center gap-1">
-              <Check className="w-3 h-3" /> Avatar video ready
-            </span>
-          ) : isGeneratingAvatar ? (
-            <span className="text-teal-400 font-semibold flex items-center gap-1">
-              Generating presenter...
+              <Check className="w-3 h-3" /> Voice audio ready
             </span>
           ) : isGeneratingVoice ? (
             <span className="text-purple-400 font-semibold flex items-center gap-1">

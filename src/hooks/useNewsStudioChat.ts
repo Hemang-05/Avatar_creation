@@ -6,7 +6,6 @@ import { Article, ArticleExtractResponse, ExtractionMethod } from "@/types/artic
 import { ResearchApiResponse, ResearchResult } from "@/types/research";
 import { NewsScript, ScriptApiResponse } from "@/types/script";
 import { TTSErrorResponse } from "@/types/tts";
-import { AvatarApiResponse, AvatarMetadata } from "@/types/avatar";
 import { AudioObjectUrlManager } from "@/lib/tts/ttsUtils";
 import { validateArticleUrl } from "@/lib/urlValidation";
 import { DEFAULT_PIPELINE_STEPS } from "@/lib/simulation";
@@ -65,8 +64,7 @@ export function useNewsStudioChat() {
         cachedEntry?.article &&
           cachedEntry?.research &&
           cachedEntry?.script &&
-          cachedEntry?.audio?.audioBase64 &&
-          cachedEntry?.avatar?.videoUrl
+          cachedEntry?.audio?.audioBase64
       );
 
       setInputError(null);
@@ -95,8 +93,8 @@ export function useNewsStudioChat() {
         role: "assistant",
         type: "text",
         content: isFullCacheHit
-          ? "Found this article in your local browser cache. Restoring the extracted article, verified research, presenter script, voice audio, and avatar video without calling external APIs."
-          : "Got it. I've received the news article.\nI'll extract the story, verify key claims across web sources, write the broadcast script, synthesize the presenter voice, and generate the talking presenter video.",
+          ? "Found this article in your local browser cache. Restoring the extracted article, verified research, presenter script, and voice audio without calling external APIs."
+          : "Got it. I've received the news article.\nI'll extract the story, verify key claims across web sources, write the broadcast script, and synthesize the presenter voice.",
         createdAt: new Date(Date.now() + 10).toISOString(),
       };
 
@@ -751,16 +749,6 @@ export function useNewsStudioChat() {
                     : `Synthesized MP3 audio via ${activeProviderHeader} (${newsScript.wordCount} words)`,
                 };
               }
-              if (idx === 5) {
-                return {
-                  ...s,
-                  label: "Generating presenter...",
-                  status: "processing",
-                  description: cachedEntry?.avatar?.videoUrl
-                    ? "Loading talking presenter video from local browser cache..."
-                    : "Animating presenter portrait with lip-sync via D-ID...",
-                };
-              }
               return s;
             });
 
@@ -769,8 +757,8 @@ export function useNewsStudioChat() {
               metadata: {
                 ...msg.metadata,
                 steps: updatedSteps,
-                currentStepIndex: 5,
-                isProcessing: true,
+                currentStepIndex: 4,
+                isProcessing: false,
               },
             };
           });
@@ -804,179 +792,9 @@ export function useNewsStudioChat() {
           return [...updated, audioMessage];
         });
 
-        // ====================================================================
-        // PHASE 6: AI PRESENTER AVATAR + LIP SYNC (Final Phase for MVP)
-        // ====================================================================
-        if (cachedEntry?.avatar?.videoUrl) {
-          const cachedAvatar: AvatarMetadata = cachedEntry.avatar;
-
-          setMessages((prev) => {
-            const updated = prev.map((msg) => {
-              if (msg.id !== assistantStatusId || !msg.metadata?.steps) return msg;
-
-              const updatedSteps: ProcessingStep[] = msg.metadata.steps.map((s, idx) => {
-                if (idx === 5) {
-                  return {
-                    ...s,
-                    label: "Avatar video ready",
-                    status: "completed",
-                    description: "Loaded talking presenter video from local browser cache",
-                  };
-                }
-                return s;
-              });
-
-              return {
-                ...msg,
-                metadata: {
-                  ...msg.metadata,
-                  steps: updatedSteps,
-                  currentStepIndex: 5,
-                  isProcessing: false,
-                },
-              };
-            });
-
-            const avatarMessage: Message = {
-              id: `avatar-${Date.now()}`,
-              role: "assistant",
-              type: "avatar",
-              content: "Loaded AI presenter video from local cache.",
-              metadata: {
-                articleUrl: extractedArticle.url,
-                title: newsScript.title,
-                avatar: cachedAvatar,
-              },
-              createdAt: new Date().toISOString(),
-            };
-
-            return [...updated, avatarMessage];
-          });
-
-          return true;
-        }
-
-        const avatarResponse = await fetch("/api/article/avatar", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            script: newsScript,
-            audioId: activeAudioId,
-            audioUrl: activeServerAudioUrl,
-            audioBase64: activeAudioBase64,
-            mimeType: activeMimeType,
-          }),
-          signal: abortControllerRef.current.signal,
-        });
-
-        const avatarData = (await avatarResponse.json().catch(() => null)) as
-          | AvatarApiResponse
-          | null;
-
-        if (avatarResponse.ok && avatarData && avatarData.success) {
-          const avatarMetadata: AvatarMetadata = {
-            videoUrl: avatarData.videoUrl,
-            provider: avatarData.provider,
-            providerVideoId: avatarData.providerVideoId,
-            status: avatarData.status,
-            durationSeconds:
-              avatarData.durationSeconds ?? newsScript.estimatedDurationSeconds,
-            presenterName: avatarData.presenterName || "Hemang",
-            scriptTitle: newsScript.title,
-            generatedAt: avatarData.generatedAt || new Date().toISOString(),
-          };
-
-          saveCachedUrlPipeline(canonicalUrl, {
-            avatar: avatarMetadata,
-          });
-
-          setMessages((prev) => {
-            const updated = prev.map((msg) => {
-              if (msg.id !== assistantStatusId || !msg.metadata?.steps) return msg;
-
-              const updatedSteps: ProcessingStep[] = msg.metadata.steps.map((s, idx) => {
-                if (idx === 5) {
-                  return {
-                    ...s,
-                    label: "Avatar video ready",
-                    status: "completed",
-                    description: `Generated talking presenter video via ${avatarData.provider.toUpperCase()}`,
-                  };
-                }
-                return s;
-              });
-
-              return {
-                ...msg,
-                metadata: {
-                  ...msg.metadata,
-                  steps: updatedSteps,
-                  currentStepIndex: 5,
-                  isProcessing: false,
-                },
-              };
-            });
-
-            const avatarMessage: Message = {
-              id: `avatar-${Date.now()}`,
-              role: "assistant",
-              type: "avatar",
-              content: "Avatar video ready. Watch the AI presenter broadcast below.",
-              metadata: {
-                articleUrl: extractedArticle.url,
-                title: newsScript.title,
-                avatar: avatarMetadata,
-              },
-              createdAt: new Date().toISOString(),
-            };
-
-            return [...updated, avatarMessage];
-          });
-        } else {
-          const avatarErrMsg =
-            (avatarData && !avatarData.success && avatarData.error?.message) ||
-            "Unable to generate presenter avatar video.";
-
-          setMessages((prev) => {
-            const updated = prev.map((msg) => {
-              if (msg.id !== assistantStatusId || !msg.metadata?.steps) return msg;
-
-              const updatedSteps: ProcessingStep[] = msg.metadata.steps.map((s, idx) => {
-                if (idx === 5) {
-                  return {
-                    ...s,
-                    label: "Presenter generation failed",
-                    status: "error",
-                    description: avatarErrMsg,
-                  };
-                }
-                return s;
-              });
-
-              return {
-                ...msg,
-                metadata: {
-                  ...msg.metadata,
-                  steps: updatedSteps,
-                  isProcessing: false,
-                  errorMessage: avatarErrMsg,
-                },
-              };
-            });
-
-            const errorMsg: Message = {
-              id: `avatar-error-${Date.now()}`,
-              role: "assistant",
-              type: "text",
-              content: avatarErrMsg,
-              createdAt: new Date().toISOString(),
-            };
-
-            return [...updated, errorMsg];
-          });
-        }
+        // Phase 5 Presenter Voice is the current final active stage.
+        // Presenter avatar generation (Phase 6) is on hold until custom image & API are provided.
+        return true;
       } catch (err: unknown) {
         if (stepTimerRef.current) {
           clearTimeout(stepTimerRef.current);
